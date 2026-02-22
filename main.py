@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     mcp = FastMCP.from_openapi(openapi_spec=openapi_spec, client=client, name="YNAB MCP Server")
     if transport == 'http':
-        mcp.run(transport="http", port=8080)
+        mcp.run(transport="http", host="0.0.0.0", port=8080)
     elif transport == 'stdio':
         mcp.run()
     else:
