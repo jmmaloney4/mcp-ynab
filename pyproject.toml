@@ -1,0 +1,9 @@
+[project]
+name = "mcp-ynab"
+version = "0.1.0"
+description = "FastMCP server for the YNAB API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=3.0.2",
+]
