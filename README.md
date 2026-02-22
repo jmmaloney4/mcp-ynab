@@ -30,28 +30,28 @@ HTTP mode starts the server on `0.0.0.0:8080`.
 
 ## Docker
 
-Build:
+Use the prebuilt image from GHCR:
 
 ```bash
-docker build -t mcp-ynab .
+docker pull ghcr.io/alexfu/mcp-ynab:latest
 ```
 
-Run in HTTP mode:
+Run prebuilt image in HTTP mode:
 
 ```bash
 docker run --rm -p 8080:8080 \
   -e YNAB_TOKEN="your_token_here" \
   -e TRANSPORT="http" \
-  mcp-ynab
+  ghcr.io/alexfu/mcp-ynab:latest
 ```
 
-Run in stdio mode:
+Run prebuilt image in stdio mode:
 
 ```bash
 docker run --rm \
   -e YNAB_TOKEN="your_token_here" \
   -e TRANSPORT="stdio" \
-  mcp-ynab
+  ghcr.io/alexfu/mcp-ynab:latest
 ```
 
 ## Notes
