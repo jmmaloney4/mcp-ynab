@@ -4,6 +4,13 @@ import yaml
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
+async def sanitize_headers(request):
+    # seeing x-forwarded headers being carried over.
+    # strip them out before making a request to YNAB.
+    strip_headers = ["x-forwarded-for", "x-forwarded-host", "x-forwarded-port", "x-forwarded-proto", "x-forwarded-server", "x-real-ip"]
+    for header in strip_headers:
+        del request.headers[header]
+
 if __name__ == "__main__":
     ynab_token = os.getenv('YNAB_TOKEN')
     transport = os.getenv('TRANSPORT') or 'http'
@@ -18,6 +25,7 @@ if __name__ == "__main__":
     client = httpx.AsyncClient(
         base_url="https://api.ynab.com/v1",
         headers={"Authorization": f"Bearer {ynab_token}"},
+        event_hooks={"request": [sanitize_headers]}
     )
 
     mcp = FastMCP.from_openapi(openapi_spec=openapi_spec, client=client, name="YNAB MCP Server")
