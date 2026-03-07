@@ -1,4 +1,5 @@
 import os
+
 import httpx
 import yaml
 from fastmcp import FastMCP
@@ -20,6 +21,41 @@ async def sanitize_headers(request):
         request.headers.pop(header, None)
 
 
+def schema_is_nullable(schema):
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list) and "null" in schema_type:
+        return True
+
+    for key in ("anyOf", "oneOf"):
+        variants = schema.get(key, [])
+        if any(variant.get("type") == "null" for variant in variants):
+            return True
+
+    return False
+
+
+def relax_nullable_string_formats(node):
+    if isinstance(node, dict):
+        node_format = node.get("format")
+        if (
+            isinstance(node_format, str)
+            and node_format in {"date", "date-time"}
+            and schema_is_nullable(node)
+        ):
+            node.pop("format", None)
+
+        for value in node.values():
+            relax_nullable_string_formats(value)
+    elif isinstance(node, list):
+        for value in node:
+            relax_nullable_string_formats(value)
+
+
+def sanitize_openapi_spec(openapi_spec):
+    relax_nullable_string_formats(openapi_spec)
+    return openapi_spec
+
+
 if __name__ == "__main__":
     ynab_token = os.getenv("YNAB_TOKEN") or os.getenv("YNAB_API_KEY")
     transport = os.getenv("TRANSPORT") or "http"
@@ -32,6 +68,7 @@ if __name__ == "__main__":
     )
     openapi_spec_response.raise_for_status()
     openapi_spec = yaml.safe_load(openapi_spec_response.text)
+    openapi_spec = sanitize_openapi_spec(openapi_spec)
 
     client = httpx.AsyncClient(
         base_url="https://api.ynab.com/v1",
