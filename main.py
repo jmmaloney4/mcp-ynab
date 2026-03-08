@@ -22,6 +22,9 @@ async def sanitize_headers(request):
 
 
 def schema_is_nullable(schema):
+    if schema.get("nullable") is True:
+        return True
+
     schema_type = schema.get("type")
     if isinstance(schema_type, list) and "null" in schema_type:
         return True
@@ -32,6 +35,42 @@ def schema_is_nullable(schema):
             return True
 
     return False
+
+
+def add_null_variant(schema):
+    if any(
+        isinstance(variant, dict) and variant.get("type") == "null"
+        for variant in schema
+    ):
+        return schema
+
+    return [*schema, {"type": "null"}]
+
+
+def normalize_nullable_schemas(node):
+    if isinstance(node, dict):
+        for value in list(node.values()):
+            normalize_nullable_schemas(value)
+
+        if node.pop("nullable", None) is True:
+            schema_type = node.get("type")
+
+            if isinstance(schema_type, str):
+                node["type"] = [schema_type, "null"]
+            elif isinstance(schema_type, list):
+                if "null" not in schema_type:
+                    node["type"] = [*schema_type, "null"]
+            elif "anyOf" in node:
+                node["anyOf"] = add_null_variant(node["anyOf"])
+            elif "oneOf" in node:
+                node["oneOf"] = add_null_variant(node["oneOf"])
+            else:
+                original = dict(node)
+                node.clear()
+                node["anyOf"] = [original, {"type": "null"}]
+    elif isinstance(node, list):
+        for value in node:
+            normalize_nullable_schemas(value)
 
 
 def relax_nullable_string_formats(node):
@@ -52,6 +91,7 @@ def relax_nullable_string_formats(node):
 
 
 def sanitize_openapi_spec(openapi_spec):
+    normalize_nullable_schemas(openapi_spec)
     relax_nullable_string_formats(openapi_spec)
     return openapi_spec
 

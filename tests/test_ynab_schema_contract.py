@@ -7,6 +7,12 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
+from fastmcp.utilities.json_schema_type import json_schema_to_type
+from fastmcp.utilities.openapi.parser import parse_openapi_to_http_routes
+from fastmcp.utilities.openapi.schemas import extract_output_schema_from_responses
+
 
 API_BASE_URL = "https://api.ynab.com/v1"
 OPENAPI_SPEC_URL = "https://api.ynab.com/papi/open_api_spec.yaml"
@@ -131,6 +137,109 @@ class SanitizeOpenApiSpecTests(unittest.TestCase):
         ]
         self.assertEqual(field_schema["format"], "date-time")
 
+    def test_sanitizer_converts_nullable_ref_schema_to_null_union(self):
+        openapi_spec = {
+            "components": {
+                "schemas": {
+                    "Example": {
+                        "type": "object",
+                        "properties": {
+                            "default_plan": {
+                                "allOf": [{"$ref": "#/components/schemas/PlanSummary"}],
+                                "nullable": True,
+                            }
+                        },
+                    }
+                }
+            }
+        }
+
+        assert self.main is not None
+        self.main.sanitize_openapi_spec(openapi_spec)
+
+        field_schema = openapi_spec["components"]["schemas"]["Example"]["properties"][
+            "default_plan"
+        ]
+        self.assertNotIn("nullable", field_schema)
+        self.assertIn("anyOf", field_schema)
+        self.assertEqual(field_schema["anyOf"][-1], {"type": "null"})
+
+    def test_get_plans_default_plan_is_converted_to_nullable_union(self):
+        openapi_spec = {
+            "openapi": "3.0.0",
+            "info": {"title": "Example", "version": "1.0.0"},
+            "paths": {
+                "/plans": {
+                    "get": {
+                        "operationId": "getPlans",
+                        "responses": {
+                            "200": {
+                                "description": "ok",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "$ref": "#/components/schemas/PlanSummaryResponse"
+                                        }
+                                    }
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "PlanSummary": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                        "required": ["id"],
+                    },
+                    "PlanSummaryResponse": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "plans": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/PlanSummary"
+                                        },
+                                    },
+                                    "default_plan": {
+                                        "allOf": [
+                                            {
+                                                "$ref": "#/components/schemas/PlanSummary"
+                                            }
+                                        ],
+                                        "nullable": True,
+                                    },
+                                },
+                                "required": ["plans"],
+                            }
+                        },
+                        "required": ["data"],
+                    },
+                }
+            },
+        }
+
+        assert self.main is not None
+        self.main.sanitize_openapi_spec(openapi_spec)
+
+        default_plan_schema = openapi_spec["components"]["schemas"][
+            "PlanSummaryResponse"
+        ]["properties"]["data"]["properties"]["default_plan"]
+        self.assertEqual(
+            default_plan_schema,
+            {
+                "anyOf": [
+                    {"allOf": [{"$ref": "#/components/schemas/PlanSummary"}]},
+                    {"type": "null"},
+                ]
+            },
+        )
+
 
 class YnabSchemaContractIntegrationTests(unittest.TestCase):
     @classmethod
@@ -179,10 +288,6 @@ class YnabSchemaContractIntegrationTests(unittest.TestCase):
         try:
             import httpx
             import yaml
-            from pydantic import TypeAdapter
-            from fastmcp.utilities.json_schema_type import json_schema_to_type
-            from fastmcp.utilities.openapi.parser import parse_openapi_to_http_routes
-            from fastmcp.utilities.openapi.schemas import extract_output_schema_from_responses
         except Exception as exc:  # pragma: no cover - environment-specific skip
             self.skipTest(f"FastMCP validation dependencies unavailable: {exc}")
 
